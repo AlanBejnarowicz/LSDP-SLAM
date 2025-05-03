@@ -127,8 +127,8 @@ class ThreeDimViewer:
         # More or less magic to make the camera movements work decently.
         gl.glPushMatrix()
         gl.glLoadIdentity()
-        gl.glRotatef(0.1*self.mouseMove[1], 1.0, 0.0, 0.0)
-        gl.glRotatef(0.1*self.mouseMove[0], 0.0, 1.0, 0.0)
+        gl.glRotatef(0.01*self.mouseMove[1], 1.0, 0.0, 0.0)
+        gl.glRotatef(0.01*self.mouseMove[0], 0.0, 1.0, 0.0)
         self.rotate_camera_based_on_key_inputs()
         self.mouseMove = [0, 0]
         gl.glMultMatrixf(viewMatrix)

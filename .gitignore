@@ -174,3 +174,15 @@ cython_debug/
 .pypirc
 *.MOV
 *.csv
+
+# Image files
+*.jpg
+*.jpeg
+*.png
+
+# Old files
+*.old
+
+# Build files
+2024/debug.txt
+2024/test.g2o
