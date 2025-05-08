@@ -36,6 +36,46 @@ class ImagePair():
                 in enumerate(temp)]
 
 
+        # Calculate distances between features and epipolar lines
+
+        # Compute the fundamental matrix from the camera matrix
+        F, _ = cv2.findFundamentalMat(
+            np.array([match.keypoint1 for match in self.raw_matches]),
+            np.array([match.keypoint2 for match in self.raw_matches]),
+            cv2.FM_8POINT
+        )
+
+        # Calculate distances from points to epipolar lines
+        epipolar_distances = []
+        for match in self.raw_matches:
+            # Convert points to homogeneous coordinates
+            point1 = np.array([[match.keypoint1[0]], [match.keypoint1[1]], [1.0]])
+            point2 = np.array([[match.keypoint2[0]], [match.keypoint2[1]], [1.0]])
+            
+            # Calculate epipolar line in the second image for point1
+            line2 = F @ point1
+            # Calculate distance from point2 to the epipolar line
+            numerator = abs(line2.T @ point2)
+            denominator = np.sqrt(line2[0]**2 + line2[1]**2)
+            distance = numerator / denominator
+            epipolar_distances.append(float(distance))
+
+        # Calculate summary statistics
+        epipolar_distances = np.array(epipolar_distances)
+        epi_mean = np.mean(epipolar_distances)
+        epi_std = np.std(epipolar_distances)
+        epi_min = np.min(epipolar_distances)
+        epi_max = np.max(epipolar_distances)
+        epi_median = np.median(epipolar_distances)
+
+        print(f"Epipolar constraint statistics:")
+        print(f"\tMean distance: {epi_mean:.4f} pixels")
+        print(f"\tStandard deviation: {epi_std:.4f} pixels")
+        print(f"\tMinimal distance: {epi_min:.4f} pixels")
+        print(f"\tMaximal distance: {epi_max:.4f} pixels")
+        print(f"\tMedian distance: {epi_median:.4f} pixels")
+
+
         # Perform a very crude filtering of the matches
         self.filtered_matches: list[Match] = [match
                 for match
@@ -84,6 +124,24 @@ class ImagePair():
                 [match.keypoint1 for match in matches], dtype=np.float64)
         points_in_frame_2 = np.array(
                 [match.keypoint2 for match in matches], dtype=np.float64)
+        
+        # Ensure points are in the correct shape for OpenCV functions
+        if points_in_frame_1.shape[1] != 2:
+            points_in_frame_1 = points_in_frame_1.reshape(-1, 2)
+        if points_in_frame_2.shape[1] != 2:
+            points_in_frame_2 = points_in_frame_2.reshape(-1, 2)
+
+        # # Display images with keypoints
+        # img1_with_keypoints = cv2.drawKeypoints(self.frame1.image.copy(), 
+        #                        [cv2.KeyPoint(x, y, 7) for x, y in points_in_frame_1], 
+        #                          None, (0, 255, 0), 4)
+        # img2_with_keypoints = cv2.drawKeypoints(self.frame2.image.copy(),
+        #                          [cv2.KeyPoint(x, y, 7) for x, y in points_in_frame_2], 
+        #                             None, (0, 0, 255), 4)
+        # cv2.imshow("Image 1 Keypoints", img1_with_keypoints)
+        # cv2.imshow("Image 2 Keypoints", img2_with_keypoints)
+        # cv2.waitKey(0)
+
         return points_in_frame_1, points_in_frame_2
 
 

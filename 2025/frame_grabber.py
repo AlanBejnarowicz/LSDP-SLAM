@@ -51,8 +51,6 @@ class FrameGrabber:
             if not ret:
                 break
 
-            # cv.imshow('Frame', frame) # Uncomment the following line to display the video frames
-
             if count % divider == 0 and count >= start and (end == -1 or count <= end):
                 cv.imwrite(os.path.join('input', f'frame_{count}.jpg'), frame)
 

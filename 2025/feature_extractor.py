@@ -1,7 +1,8 @@
 import numpy as np
 import cv2 as cv
-from matplotlib import pyplot as plt
+from show_image import show_image
 import os
+import xml.etree.ElementTree as ET
 
 
 class FeatureExtractor:
@@ -9,7 +10,7 @@ class FeatureExtractor:
     Work in progress...
     """
 
-    def __init__(self, img_dir: str) -> None:
+    def __init__(self, img_dir: str, calibration_file: str) -> None:
         """
         Initializes the feature extractor with the image directory.
 
@@ -29,6 +30,44 @@ class FeatureExtractor:
         self.sift = cv.SIFT_create()
         self.MIN_MATCH_COUNT = 10
 
+        # Read camera settings from XML file
+        if not os.path.exists(calibration_file):
+            raise ValueError('Calibration file does not exist', calibration_file)
+
+        # Parse the XML file using ElementTree
+        tree = ET.parse(calibration_file)
+        root = tree.getroot()
+
+        # Extract parameters from the XML structure
+        width = int(root.find('width').text)
+        height = int(root.find('height').text)
+        f = float(root.find('f').text)
+        cx = float(root.find('cx').text)
+        cy = float(root.find('cy').text)
+        k1 = float(root.find('k1').text)
+        k2 = float(root.find('k2').text)
+        k3 = float(root.find('k3').text)
+        p1 = float(root.find('p1').text)
+        p2 = float(root.find('p2').text)
+
+        # Camera matrix
+        self.camera_matrix = np.array([
+            [f, 0, width/2 + cx],
+            [0, f, height/2 + cy],
+            [0, 0, 1]
+        ], dtype=np.float64)
+
+        # Distortion coefficients [k1, k2, p1, p2, k3]
+        self.dist_coeffs = np.array([k1, k2, p1, p2, k3], dtype=np.float64)
+
+        # Print the camera matrix and distortion coefficients
+        print(f'Camera Matrix:\n{self.camera_matrix}\n')
+        print(f'Distortion Coefficients:\n{self.dist_coeffs}\n')
+
+        self.essential_matrix = None
+        self.rotation_matrix = None
+        self.translation_vector = None
+
 
     def SIFT_extract_features(self) -> None:
         """
@@ -38,7 +77,7 @@ class FeatureExtractor:
         img1 = cv.imread(os.path.join(self.img_dir, self.img_name[0]), cv.IMREAD_GRAYSCALE) # queryImage
         img2 = cv.imread(os.path.join(self.img_dir, self.img_name[1]), cv.IMREAD_GRAYSCALE) # trainImage
 
-        # find the keypoints and descriptors with SIF T
+        # Find the keypoints and descriptors with SIFT
         kp1, des1 = self.sift.detectAndCompute(img1, None)
         kp2, des2 = self.sift.detectAndCompute(img2, None)
 
@@ -50,7 +89,7 @@ class FeatureExtractor:
 
         matches = flann.knnMatch(des1, des2, k=2)
 
-        # store all the good matches as per Lowe's ratio test.
+        # Store all the good matches as per Lowe's ratio test.
         good = []
         for m, n in matches:
             if m.distance < 0.7*n.distance:
@@ -65,23 +104,41 @@ class FeatureExtractor:
         
             h,w = img1.shape
             pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-            dst = cv.perspectiveTransform(pts,M)
+            dst = cv.perspectiveTransform(pts, M)
 
             img2 = cv.polylines(img2, [np.int32(dst)], True, 255, 3, cv.LINE_AA)
-
         else:
             print('Not enough matches are found - {}/{}'.format(len(good), self.MIN_MATCH_COUNT))
             matchesMask = None
 
-        draw_params = dict(matchColor=(0, 255, 0), # draw matches in green color
+        draw_params = dict(matchColor=(0, 255, 0), # Draw matches in green color
                            singlePointColor=None,
-                           matchesMask=matchesMask, # draw only inliers
+                           matchesMask=matchesMask, # Draw only inliers
                            flags=2)
 
         img3 = cv.drawMatches(img1, kp1, img2, kp2, good, None, **draw_params)
 
-        plt.imshow(img3, 'gray')
-        plt.show()
+        show_image('Good Matches', img3)
+
+        # Estimate the esential matrix
+        self.essential_matrix, mask = cv.findEssentialMat(src_pts, dst_pts, self.camera_matrix,
+                                                     method=cv.RANSAC, prob=0.999, threshold=1.0)
+        print(f'Essential Matrix:\n{self.essential_matrix}\n')
+
+        # Recover pose (rotation matrix and translation vector) from the essential matrix
+        points, R, t, mask = cv.recoverPose(self.essential_matrix, src_pts, dst_pts, self.camera_matrix)
+
+        # Store the rotation matrix and translation vector
+        self.rotation_matrix = R
+        self.translation_vector = t
+
+        # Print the results
+        print(f'Number of inlier points: {points}')
+        print(f'Rotation Matrix:\n{self.rotation_matrix}\n')
+        print(f'Translation Vector:\n{self.translation_vector}\n')
+
+        # The scale of translation is ambiguous in monocular vision
+        print('Note: The translation vector direction is accurate, but the scale is ambiguous.')
 
 
 def main() -> None:
@@ -91,9 +148,10 @@ def main() -> None:
 
     # Directory containing images
     img_dir = 'input'
+    calibration_file = 'phantom4pro-calibration.xml'
 
     # Create an instance of FeatureExtractor
-    feature_extractor = FeatureExtractor(img_dir)
+    feature_extractor = FeatureExtractor(img_dir, calibration_file)
 
     # Extract features using SIFT
     feature_extractor.SIFT_extract_features()

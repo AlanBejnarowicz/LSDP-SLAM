@@ -401,6 +401,7 @@ class VisualSlam:
 
         image_to_show = self.current_image_pair.visualize_matches(essential_matches)
         cv2.imshow("matches", image_to_show)
+        # cv2.imwrite("matches.jpg", image_to_show)
 
         self.estimate_current_camera_position(frame2)
 
